@@ -198,7 +198,10 @@ def train(args, train_dataset, model, tokenizer):
                 if args.sync_method == 'none' and step < 5:
                     print(f"Epoch {epoch}, Step {step}, Loss: {loss_val:.6f}")
 
-                if is_main:
+                if is_distributed(args):
+                    logger.info("Rank %d, Epoch %d, Step %d, Loss: %.6f",
+                                args.local_rank, epoch, step, loss_val)
+                elif is_main:
                     logger.info("Epoch %d, Step %d, Loss: %.6f", epoch, step, loss_val)
 
                 if prof is not None:
@@ -424,6 +427,13 @@ def main():
         format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
         datefmt='%m/%d/%Y %H:%M:%S',
         level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
+
+    if is_distributed(args):
+        rank_log_file = f"loss_rank{args.local_rank}.log"
+        fh = logging.FileHandler(rank_log_file, mode='w')
+        fh.setLevel(logging.INFO)
+        fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s', datefmt='%m/%d/%Y %H:%M:%S'))
+        logging.getLogger().addHandler(fh)
     logger.warning("Rank: %s | Device: %s | sync_method: %s | profile: %s",
                    args.local_rank, args.device, args.sync_method, args.profile)
 
