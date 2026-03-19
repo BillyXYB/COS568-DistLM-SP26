@@ -434,7 +434,15 @@ def main():
         fh = logging.FileHandler(rank_log_file, mode='w')
         fh.setLevel(logging.INFO)
         fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s', datefmt='%m/%d/%Y %H:%M:%S'))
-        logging.getLogger().addHandler(fh)
+        root_logger = logging.getLogger()
+        root_logger.addHandler(fh)
+        # Root logger must be INFO so file handler receives loss messages;
+        # keep the existing stream (console) handler at WARN for non-rank-0.
+        root_logger.setLevel(logging.INFO)
+        if args.local_rank not in [-1, 0]:
+            for h in root_logger.handlers:
+                if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler):
+                    h.setLevel(logging.WARN)
     logger.warning("Rank: %s | Device: %s | sync_method: %s | profile: %s",
                    args.local_rank, args.device, args.sync_method, args.profile)
 
