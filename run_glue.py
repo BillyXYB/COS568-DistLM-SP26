@@ -214,10 +214,9 @@ def train(args, train_dataset, model, tokenizer):
             if args.max_steps > 0 and global_step > args.max_steps:
                 break
 
-            # Evaluate after each epoch
+            # Evaluate after each epoch (all ranks participate to pair barriers)
             eval_model = model.module if args.sync_method == 'ddp' else model
-            if is_main:
-                evaluate(args, eval_model, tokenizer)
+            evaluate(args, eval_model, tokenizer)
 
     if args.profile:
         trace_file = f"trace_rank{max(args.local_rank, 0)}_{args.sync_method}.json"
@@ -293,12 +292,13 @@ def evaluate(args, model, tokenizer, prefix=""):
         result = compute_metrics(eval_task, preds, out_label_ids)
         results.update(result)
 
-        output_eval_file = os.path.join(eval_output_dir, "eval_results.txt")
-        with open(output_eval_file, "w") as writer:
-            logger.info("***** Eval results %s *****", prefix)
-            for key in sorted(result.keys()):
-                logger.info("  %s = %s", key, str(result[key]))
-                writer.write("%s = %s\n" % (key, str(result[key])))
+        if args.local_rank in [-1, 0]:
+            output_eval_file = os.path.join(eval_output_dir, "eval_results.txt")
+            with open(output_eval_file, "w") as writer:
+                logger.info("***** Eval results %s *****", prefix)
+                for key in sorted(result.keys()):
+                    logger.info("  %s = %s", key, str(result[key]))
+                    writer.write("%s = %s\n" % (key, str(result[key])))
 
     return results
 
@@ -429,7 +429,8 @@ def main():
         level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
 
     if is_distributed(args):
-        rank_log_file = f"loss_rank{args.local_rank}.log"
+        os.makedirs(args.output_dir, exist_ok=True)
+        rank_log_file = os.path.join(args.output_dir, f"loss_rank{args.local_rank}.log")
         fh = logging.FileHandler(rank_log_file, mode='w')
         fh.setLevel(logging.INFO)
         fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s', datefmt='%m/%d/%Y %H:%M:%S'))
@@ -478,7 +479,7 @@ def main():
         global_step, tr_loss = train(args, train_dataset, model, tokenizer)
         logger.info("global_step = %s, average loss = %s", global_step, tr_loss)
 
-    if args.do_eval and args.local_rank in [-1, 0]:
+    if args.do_eval:
         eval_model = model.module if args.sync_method == 'ddp' else model
         evaluate(args, eval_model, tokenizer, prefix="final")
 
