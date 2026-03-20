@@ -223,7 +223,6 @@ def train(args, train_dataset, model, tokenizer):
         schedule = torch.profiler.schedule(wait=1, warmup=0, active=3, repeat=1)
         with torch.profiler.profile(
             schedule=schedule,
-            on_trace_ready=torch.profiler.tensorboard_trace_handler('.'),
             record_shapes=True,
             with_stack=True,
         ) as prof:
